@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>勤務表</title>
+<style>
+html,body{margin:0;background:#F4F2EC;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;color:#1d1b16}
+@media (prefers-color-scheme:dark){html,body{background:#141310;color:#f1ede3}}
+.top{background:#F5D33F;height:69px;border-bottom:1px solid #e0bf2c}
+.m{padding:60px 20px;text-align:center;font-weight:700;color:#77705f}
+.e{margin:20px;padding:16px;border-radius:14px;background:#FCE3E1;color:#a8322b;font-weight:800}
+.e button{margin-top:12px;height:48px;padding:0 20px;border-radius:12px;border:0;background:#1d1b16;color:#fff;font:inherit;font-weight:800}
+</style>
+</head>
+<body>
+<div class="top"></div>
+<div class="m" id="m">読み込み中…</div>
+<script>
+// 読み込み役: 画面本体は Google 側(TTGG Shift)から取ってくる。GitHub のこのファイルは今後さわらない。
+(function(){
+  var API = 'https://script.google.com/macros/s/AKfycbxnCLyLVAyzmJNG4UvA2KyuFlRdT_KghSUWApmpmMX4qzbfw6RdDmsVChKSLs1qvahd/exec';
+  // 本人の鍵(?k=)は読んだらアドレス欄から消し、このタブの間だけ覚えておく
+  try {
+    var k = new URLSearchParams(location.search).get('k') || '';
+    if (/^[0-9a-f]{16,128}$/i.test(k)) { sessionStorage.setItem('sched_k', k); history.replaceState(null, '', location.pathname); }
+  } catch (e) {}
+  function fail(){
+    document.getElementById('m').outerHTML = '<div class="e">勤務表を読み込めませんでした。電波を確認してください。<br><button onclick="location.reload()">もう一度読み込む</button></div>';
+  }
+  fetch(API + '?app=1&t=' + Date.now(), { credentials: 'omit', redirect: 'follow', cache: 'no-store' })
+    .then(function(r){ if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(function(html){
+      if (html.indexOf('<html') < 0) throw new Error('bad');
+      document.open(); document.write(html); document.close();
+    })
+    .catch(fail);
+})();
+</script>
+</body>
+</html>
