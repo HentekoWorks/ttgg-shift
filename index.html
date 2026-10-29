@@ -365,7 +365,7 @@ function renderDriver(){
       lastEv = evId;
       var right, mid;
       if (x.published){ right = finChip(x.final); mid = (x.hope === 'なし' ? '希望なし' : '希望 ' + HOPE[x.hope].t) + (x.changed ? '<span class="chg">変更あり</span>' : ''); }
-      else if (p.accepting){ right = hopeChip(x.hope); mid = ''; }
+      else if (p.accepting){ right = hopeChip(x.hope); mid = x._pending ? '<span class="chg" style="background:var(--cx-bg);color:var(--cx-fg)">保存中…</span>' : ''; }
       else { right = '<span class="chip f-n">未公開</span>'; mid = x.hope === 'なし' ? '希望なし' : '希望 ' + HOPE[x.hope].t; }
       var can = p.accepting && x.date >= tdy;
       h += '<button class="row ' + wcls(x.date) + (x.date < tdy ? ' past' : '') + (evId ? ' ev' : '') + '" ' + (can ? 'data-d="' + x.date + '"' : 'disabled') + '>' +
@@ -395,9 +395,11 @@ function hopeSheet(date){
   openSheet(h);
   $('sx').onclick = closeLayer;
   document.querySelectorAll('.opt[data-h]').forEach(function(b){ b.onclick = function(){
-    var v = b.dataset.h; closeLayer(); busy(true);
-    call('apiSetHope', K, date, v).then(function(dv){ busy(false); S.boot.driver = dv; renderDriver(); toast(md(date) + ' を「' + HOPE[v].t + '」で保存しました', 'ok'); })
-      .catch(function(e){ busy(false); toast('保存されていません。' + errMsg(e), 'ng'); });
+    var v = b.dataset.h; closeLayer();
+    if (v === x.hope) return;
+    var prev = x.hope; x.hope = v; x._pending = true; renderDriver();
+    call('apiSetHope', K, date, v).then(function(){ x._pending = false; renderDriver(); toast(md(date) + ' を「' + HOPE[v].t + '」で保存しました', 'ok'); })
+      .catch(function(e){ x.hope = prev; x._pending = false; renderDriver(); toast('保存されていません。' + errMsg(e), 'ng'); });
   }; });
 }
 
@@ -434,6 +436,18 @@ function admCall(fn){
       toast(m, 'ng'); throw e;
     });
 }
+// 変更系: 画面は先に変え、裏で保存。失敗したら戻す(S.adm は上書きしない)
+function admSave(fn){
+  var args = Array.prototype.slice.call(arguments, 1);
+  S.pending = (S.pending || 0) + 1;
+  return call.apply(null, [fn, K, tok()].concat(args)).then(function(r){ S.pending--; return r; })
+    .catch(function(e){
+      S.pending--;
+      var m = errMsg(e);
+      if (m.indexOf('PIN_REQUIRED') >= 0){ setTok(''); S.adm = null; renderPin(); }
+      throw new Error(m);
+    });
+}
 function loadAdmin(pid){
   $('main').innerHTML = '<div class="loading">読み込み中…</div>';
   admCall('apiAdmin', pid || '').then(function(){ render(); }).catch(function(){});
@@ -459,8 +473,9 @@ function renderMaster(){
   var a = S.adm;
   if (!a.period) return noPeriod();
   var p = a.period, ds = a.dates;
-  var q = S.q.trim();
-  var mem = a.members.filter(function(m){ return !q || m.name.indexOf(q) >= 0; });
+  var mem = a.members;
+  var oldTw = document.querySelector('.tw'), keep = oldTw && S.tab === 'master' && S.keepScroll ? [oldTw.scrollLeft, oldTw.scrollTop] : null;
+  S.keepScroll = false;
   var inputN = a.members.filter(function(m){ return a.hopeCount[m.id] > 0; }).length;
   var h = '<div class="wide"><div class="bar">' + periodSelect() +
     (p.published ? '<span class="pill ok">● 公開中</span>' : '<span class="pill n">未公開</span>') +
@@ -491,9 +506,9 @@ function renderMaster(){
   h += srow('割り当て<small class="lsub">CX／MX／SX</small>', function(d){ var c = a.capacity[d]; return c && c.asg[0] !== '' ? c.asg.join('／') : '−'; });
   h += srow('勤務<small class="lsub">○／CX／MX／SX</small>', function(d, ix){ var c = cnt[ix]; return c.o + '／' + c.CX + '／' + c.MX + '／' + c.SX; });
   h += srow('管理', function(d, ix){ return cnt[ix].k; });
-  h += '<tr class="sep"><th class="nm" style="text-align:left">ドライバー（' + mem.length + '名）</th><td colspan="' + ds.length + '"></td></tr>';
+  h += '<tr class="sep"><th class="nm" style="text-align:left" id="sepn">ドライバー（' + mem.length + '名）</th><td colspan="' + ds.length + '"></td></tr>';
   mem.forEach(function(m){
-    h += '<tr class="drv"><th class="nm">' + esc(m.name) + '</th>';
+    h += '<tr class="drv" data-n="' + esc(m.name.replace(/\s/g, '')) + '"><th class="nm">' + esc(m.name) + '</th>';
     ds.forEach(function(d){
       var c = cellOf(m.id, d), f = effF(c), hp = c.h || 'なし';
       var diff = c.f && c.f !== AUTO[c.h || ''];
@@ -502,17 +517,28 @@ function renderMaster(){
     });
     h += '</tr>';
   });
-  if (!mem.length) h += '<tr><td colspan="' + (ds.length + 1) + '" class="empty">該当するドライバーがいません</td></tr>';
+  h += '<tr id="noq" style="display:none"><td colspan="' + (ds.length + 1) + '" class="empty">該当するドライバーがいません</td></tr>';
   h += '</tbody></table></div></div>';
   $('main').innerHTML = h;
   bindPsel();
   var tw = document.querySelector('.tw'), td = document.querySelector('th.tdy'), nm = document.querySelector('table.m thead tr.dh .nm');
-  if (tw && td && nm && !S.q) tw.scrollLeft = Math.max(0, td.offsetLeft - nm.offsetWidth - 8);
-  $('q').oninput = function(){ S.q = this.value; var pos = this.selectionStart; renderMaster(); var n = $('q'); n.focus(); n.setSelectionRange(pos, pos); };
+  if (keep && tw){ tw.scrollLeft = keep[0]; tw.scrollTop = keep[1]; }
+  else if (tw && td && nm) tw.scrollLeft = Math.max(0, td.offsetLeft - nm.offsetWidth - 8);
+  applyQ();
+  // 日本語入力の変換中は絞り込まない(変換が崩れるため)
+  $('q').addEventListener('input', function(e){ if (e.isComposing) return; S.q = this.value; applyQ(); });
+  $('q').addEventListener('compositionend', function(){ S.q = this.value; applyQ(); });
   $('prt').onclick = function(){ window.print(); };
   if (canEdit()) $('main').querySelectorAll('.cell[data-m]').forEach(function(b){ b.onclick = function(){ finalSheet(b.dataset.m, b.dataset.d); }; });
 }
 
+function applyQ(){
+  var q = (S.q || '').replace(/\s/g, '');
+  var n = 0;
+  document.querySelectorAll('tr.drv').forEach(function(tr){ var hit = !q || tr.dataset.n.indexOf(q) >= 0; tr.style.display = hit ? '' : 'none'; if (hit) n++; });
+  if ($('sepn')) $('sepn').textContent = 'ドライバー（' + n + '名）';
+  if ($('noq')) $('noq').style.display = n ? 'none' : '';
+}
 function finalSheet(mid, date){
   var a = S.adm, ds = a.dates;
   var m = a.members.filter(function(x){ return x.id === mid; })[0];
@@ -540,7 +566,12 @@ function finalSheet(mid, date){
     $('hp').onclick = function(){ st.hopeOpen = !st.hopeOpen; draw(); };
     document.querySelectorAll('[data-hp]').forEach(function(b){ b.onclick = function(){
       var v = b.dataset.hp; closeLayer();
-      admCall('apiSetHopeAdmin', a.period.id, mid, date, v).then(function(){ renderMaster(); toast(m.name + ' ' + md(date) + ' の希望を「' + HOPE[v].t + '」にしました', 'ok'); }).catch(function(){});
+      var key = mid + '_' + date, before = a.cells[key] ? { h: a.cells[key].h, f: a.cells[key].f } : null;
+      var cc = a.cells[key] || { h: '', f: '' }; cc.h = v; a.cells[key] = cc;
+      if (!before || !before.h) a.hopeCount[mid] = (a.hopeCount[mid] || 0) + 1;
+      S.keepScroll = true; renderMaster();
+      admSave('apiSetHopeAdmin', a.period.id, mid, date, v).then(function(){ toast(m.name + ' ' + md(date) + ' の希望を「' + HOPE[v].t + '」で保存しました', 'ok'); })
+        .catch(function(e){ if (!S.adm) return; if (before) a.cells[key] = before; else delete a.cells[key]; if (!before || !before.h) a.hopeCount[mid]--; S.keepScroll = true; renderMaster(); toast('保存されていません。' + e.message, 'ng'); });
     }; });
     document.querySelectorAll('[data-mo]').forEach(function(b){ b.onclick = function(){ if (b.disabled) return; st.mode = b.dataset.mo; draw(); }; });
     if ($('un')) $('un').onchange = function(){ st.until = this.value; draw(); };
@@ -551,7 +582,11 @@ function finalSheet(mid, date){
     var to = st.mode === 'one' ? date : st.mode === 'end' ? ds[ds.length - 1] : st.until;
     var list = ds.filter(function(d){ return d >= date && d <= to; });
     closeLayer();
-    admCall('apiSetFinal', a.period.id, mid, list, v).then(function(){ renderMaster(); toast(m.name + ' ' + (list.length > 1 ? md(list[0]) + '〜' + md(list[list.length - 1]) + '（' + list.length + '日分）' : md(date)) + ' を保存しました', 'ok'); }).catch(function(){});
+    var before = {};
+    list.forEach(function(d){ var key = mid + '_' + d; before[key] = a.cells[key] ? { h: a.cells[key].h, f: a.cells[key].f } : null; var cc = a.cells[key] || { h: '', f: '' }; cc.f = v; a.cells[key] = cc; });
+    S.keepScroll = true; renderMaster();
+    admSave('apiSetFinal', a.period.id, mid, list, v).then(function(){ toast(m.name + ' ' + (list.length > 1 ? md(list[0]) + '〜' + md(list[list.length - 1]) + '（' + list.length + '日分）' : md(date)) + ' を保存しました', 'ok'); })
+      .catch(function(e){ if (!S.adm) return; Object.keys(before).forEach(function(key){ if (before[key]) a.cells[key] = before[key]; else delete a.cells[key]; }); S.keepScroll = true; renderMaster(); toast('保存されていません。' + e.message, 'ng'); });
   }
   draw();
 }
