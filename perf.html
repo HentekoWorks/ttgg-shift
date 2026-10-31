@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>パフォーマンスレポート</title>
+<style>
+html,body{margin:0;background:#F3F4F1;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Yu Gothic UI",Meiryo,sans-serif;color:#16181A}
+@media (prefers-color-scheme:dark){html,body{background:#121413;color:#F1F3EF}}
+.top{background:#16181A;height:64px}
+.m{padding:60px 20px;text-align:center;font-weight:700;color:#5C6268}
+.e{margin:20px;padding:16px;border-radius:14px;background:#FDE2E0;color:#8E1B1B;font-weight:800}
+.e button{margin-top:12px;height:48px;padding:0 20px;border-radius:12px;border:0;background:#16181A;color:#fff;font:inherit;font-weight:800}
+</style>
+</head>
+<body>
+<div class="top"></div>
+<div class="m" id="m">読み込み中…</div>
+<script>
+// 読み込み役: 画面本体は Google 側(TTGG Performance)から取ってくる。GitHub のこのファイルは今後さわらない。
+(function(){
+  var API = 'https://script.google.com/macros/s/AKfycbxn265zCXbRLPXBKWYGCF7VzHm5XfFzbRgfPfDF5u74vK-Z9pAT4lBav5xrVHHJ79S_/exec';
+  // 本人の鍵(?k=)は読んだらアドレス欄から消し、このタブの間だけ覚えておく
+  try {
+    var k = new URLSearchParams(location.search).get('k') || '';
+    if (/^[0-9a-f]{16,128}$/i.test(k)) { sessionStorage.setItem('perf_k', k); history.replaceState(null, '', location.pathname); }
+  } catch (e) {}
+  function fail(){
+    document.getElementById('m').outerHTML = '<div class="e">読み込めませんでした。電波を確認してください。<br><button onclick="location.reload()">もう一度読み込む</button></div>';
+  }
+  fetch(API + '?app=1&t=' + Date.now(), { credentials: 'omit', redirect: 'follow', cache: 'no-store' })
+    .then(function(r){ if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(function(html){
+      if (html.indexOf('<html') < 0) throw new Error('bad');
+      document.open(); document.write(html); document.close();
+    })
+    .catch(fail);
+})();
+</script>
+</body>
+</html>
