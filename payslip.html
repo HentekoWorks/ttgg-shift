@@ -53,7 +53,10 @@ html,body{margin:0;background:#f6f4f4;font-family:-apple-system,BlinkMacSystemFo
   if (ok(cached)) {
     var at = cached.lastIndexOf('</body>');
     var js = '<script>' + REV + '(' + JSON.stringify(API) + ',' + JSON.stringify(APP) + ',' + JSON.stringify(KEY) + ',localStorage.getItem(' + JSON.stringify(KEY) + ')||"");<' + '/script>';
-    show(at >= 0 ? cached.slice(0, at) + js + cached.slice(at) : cached + js);
+    var page = at >= 0 ? cached.slice(0, at) + js + cached.slice(at) : cached + js;
+    // 読み込み中に書き換えると前の画面(上の帯)が残るので、読み終わってから入れ替える
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { show(page); });
+    else show(page);
   } else {
     fetch(API + '?app=' + APP + '&t=' + Date.now(), { credentials: 'omit', redirect: 'follow', cache: 'no-store' })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
